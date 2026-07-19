@@ -2,6 +2,7 @@ import math
 from collections import deque
 import numpy as np
 
+from opendbc.car.common.filter_simple import FirstOrderFilter
 from opendbc.car.lateral import (
   apply_driver_steer_torque_limits, common_fault_avoidance,
   apply_steer_angle_limits_vm, get_max_angle_delta_vm,
@@ -26,6 +27,14 @@ PANDA_STEP_MARGIN = 0.9
 MIN_TORQUE_FRAMES = 50
 HANDOFF_EXIT_DEG = 15.0      # hand back to angle when the wheel is within this of the commanded angle
 UNWIND_HANDOFF_RATE = 40.0  # max wheel speed in deg/s to hand back to angle
+HANDOFF_MAX_ANGLE_DEG = 25.0  # no handoff to angle mid-turn
+
+# light-torsion presence, bridges capacitive dropouts while hands slide on the wheel
+PRESENCE_LPF_RC = 0.032       # ~5 Hz low-pass on torsion bar torque
+PRESENCE_TORQUE_THRESHOLD = 1.5
+PRESENCE_MIN_FRAMES = 30      # sign-consistent frames above threshold to latch (0.3s)
+PRESENCE_HOLD_FRAMES = 100    # latch hold (1.0s)
+HANDS_OFF_EXIT_FRAMES = 100   # hands-off time before handing back to angle (1.0s)
 EAC_RECOVER_FRAMES = 15     # angle frames with the EPAS EAC not active before falling back to torque (~0.15s, normal activation is under 0.05s)
 
 # blip the TOI request bit at high angle so the EPAS does not latch ToiFlt
@@ -68,6 +77,11 @@ class ExternalController:
     self.torsion_cnt = 0
     self.torsion_sign = 0
     self.hands_on = False
+    self.torsion_lpf = FirstOrderFilter(0.0, PRESENCE_LPF_RC, 0.01)
+    self.presence_cnt = 0
+    self.presence_sign = 0
+    self.presence_hold = 0
+    self.hands_off_frames = 0
 
     # cooperative torque mode
     self.torque_active = False
@@ -115,12 +129,26 @@ class ExternalController:
       self.torsion_sign = sign
     return self.torsion_cnt > torsion_min_count
 
+  def _update_torsion_presence(self, torque):
+    # sustained sign-consistent light torque, latched
+    filtered = self.torsion_lpf.update(torque)
+    sign = 1 if filtered > PRESENCE_TORQUE_THRESHOLD else -1 if filtered < -PRESENCE_TORQUE_THRESHOLD else 0
+    self.presence_cnt = self.presence_cnt + 1 if sign != 0 and sign == self.presence_sign else int(sign != 0)
+    self.presence_sign = sign
+    if self.presence_cnt >= PRESENCE_MIN_FRAMES:
+      self.presence_hold = PRESENCE_HOLD_FRAMES
+    elif self.presence_hold > 0:
+      self.presence_hold -= 1
+    return self.presence_hold > 0
+
   def _update_hands_on(self, CS):
     # hands-on if any of: capacitive sensor, EPAS-side level, or torsion bar
     calibration = CS.sccm_wheel_touch["SETME_X52"]
     wheel_touch = self._update_wheel_touched(CS.sccm_wheel_touch["SCCM_WheelTouch_CapacitiveValue"] > calibration * 0.9, 25)
     torsion = self._update_torsion(CS.out.steeringTorque, 4.0, 9)
+    presence = self._update_torsion_presence(CS.out.steeringTorque)
     self.hands_on = wheel_touch or torsion or CS.hands_on_level > 1
+    self.hands_off_frames = 0 if self.hands_on or presence else self.hands_off_frames + 1
 
   def _update_torque_active(self, CS, lat_active: bool, desired_angle: float):
     self.torque_active_frames = self.torque_active_frames + 1 if self.torque_active else 0
@@ -144,9 +172,9 @@ class ExternalController:
     elif not self.lat_active_last and not epas_ready:
       self.torque_active = True
     # hand back to angle once hands off and the wheel is settled near the commanded angle
-    elif self.torque_active and self.torque_active_frames >= MIN_TORQUE_FRAMES and not self.hands_on and epas_ready:
+    elif self.torque_active and self.torque_active_frames >= MIN_TORQUE_FRAMES and self.hands_off_frames >= HANDS_OFF_EXIT_FRAMES and epas_ready:
       fw_max = float(np.interp(CS.out.vEgoRaw, EPAS_FW_MAX_ANGLE_BP, EPAS_FW_MAX_ANGLE_V)) * EPAS_FW_ANGLE_MARGIN
-      in_envelope = abs(CS.out.steeringAngleDeg) < fw_max
+      in_envelope = abs(CS.out.steeringAngleDeg) < min(fw_max, HANDOFF_MAX_ANGLE_DEG)
       # only once the wheel motion fits the EPAS rate budget
       thr_dps = float(np.interp(CS.out.vEgoRaw, EPAS_FW_RATE_BP, EPAS_FW_RATE_V)) * 100.0
       lo, hi = self.rate_budget.bounds(thr_dps, EPAS_FW_RATE_MARGIN)
