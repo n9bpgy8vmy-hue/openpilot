@@ -29,6 +29,12 @@ HANDOFF_EXIT_DEG = 15.0      # hand back to angle when the wheel is within this 
 UNWIND_HANDOFF_RATE = 40.0  # max wheel speed in deg/s to hand back to angle
 HANDOFF_MAX_ANGLE_DEG = 25.0  # no handoff to angle mid-turn
 
+# the wheel's own inertia loads the torsion bar whenever the column is swung hard, which reads
+# the same as a driver pushing. a driver taking over does it against a settled wheel, so only
+# trust a torsion peak when the column is calm
+TORSION_RATE_WINDOW = 25       # frames of wheel-rate history (0.25s)
+TORSION_MAX_RATE_SWING = 90.0  # deg/s peak-to-peak, above this a torsion peak is inertial
+
 # light-torsion presence, bridges capacitive dropouts while hands slide on the wheel
 PRESENCE_LPF_RC = 0.032       # ~5 Hz low-pass on torsion bar torque
 PRESENCE_TORQUE_THRESHOLD = 1.5
@@ -74,6 +80,7 @@ class ExternalController:
     self.wheel_touch_cnt = 0
     self.torsion_cnt = 0
     self.torsion_sign = 0
+    self.rate_hist = deque([0.0] * TORSION_RATE_WINDOW, maxlen=TORSION_RATE_WINDOW)
     self.hands_on = False
     self.torsion_lpf = FirstOrderFilter(0.0, PRESENCE_LPF_RC, 0.01)
     self.presence_cnt = 0
@@ -113,7 +120,13 @@ class ExternalController:
     self.wheel_touch_cnt = int(np.clip(self.wheel_touch_cnt, 0, wheel_touched_min_count * 2 + 1))
     return self.wheel_touch_cnt > wheel_touched_min_count
 
-  def _update_torsion(self, torque, torque_threshold, torsion_min_count):
+  def _update_torsion(self, torque, steering_rate, torque_threshold, torsion_min_count):
+    self.rate_hist.append(steering_rate)
+    # inertial reaction while we swing the column is not a driver, don't let it accumulate
+    if max(self.rate_hist) - min(self.rate_hist) > TORSION_MAX_RATE_SWING:
+      self.torsion_cnt = 0
+      return False
+
     abs_torque = abs(torque)
     pressed = abs_torque > torque_threshold
     sign = int(np.sign(torque))
@@ -143,7 +156,7 @@ class ExternalController:
     # hands-on if any of: capacitive sensor, EPAS-side level, or torsion bar
     calibration = CS.sccm_wheel_touch["SETME_X52"]
     wheel_touch = self._update_wheel_touched(CS.sccm_wheel_touch["SCCM_WheelTouch_CapacitiveValue"] > calibration * 0.9, 25)
-    torsion = self._update_torsion(CS.out.steeringTorque, 4.0, 9)
+    torsion = self._update_torsion(CS.out.steeringTorque, CS.out.steeringRateDeg, 4.0, 9)
     presence = self._update_torsion_presence(CS.out.steeringTorque)
     self.hands_on = wheel_touch or torsion or CS.hands_on_level > 1
     self.hands_off_frames = 0 if self.hands_on or presence else self.hands_off_frames + 1
