@@ -1,0 +1,41 @@
+name: Rivian lane-position port
+
+on:
+  push:
+    branches: [rx-laneposition, feature/rivian-lane-position-port]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install locked test environment
+        run: uv sync --frozen --extra testing
+      - name: Generate native Params and Cereal modules
+        run: uv run --frozen --all-extras scons -j2 --minimal openpilot/common/params_pyx.so openpilot/cereal
+      - name: Run focused tests
+        run: |
+          uv run --frozen --extra testing pytest -q -n 0 \
+            --confcutdir=openpilot/sunnypilot \
+            openpilot/sunnypilot/rivian_lane_position/tests/test_lane_position_controller.py \
+            openpilot/sunnypilot/modeld_v2/tests/test_camera_offset_helper.py \
+            openpilot/sunnypilot/sunnylink/tests/test_compile_settings_ui.py \
+            openpilot/sunnypilot/sunnylink/tests/test_settings_changes.py
+      - name: Lint port and integration points
+        run: |
+          uv run --frozen --extra testing ruff check \
+            openpilot/sunnypilot/rivian_lane_position \
+            openpilot/selfdrive/selfdrived/selfdrived.py \
+            openpilot/sunnypilot/modeld_v2/modeld.py \
+            openpilot/sunnypilot/modeld_v2/camera_offset_helper.py \
+            openpilot/sunnypilot/modeld_v2/tests/test_camera_offset_helper.py
