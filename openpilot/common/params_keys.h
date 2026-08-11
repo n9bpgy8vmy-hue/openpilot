@@ -226,6 +226,26 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ToyotaEnforceStockLongitudinal", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"ToyotaStopAndGoHack", {PERSISTENT | BACKUP, BOOL, "0"}},
 
+    // Optional Rivian lane-position assistance
+    {"RivianPilotFeatureLogging", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"RivianPilotLanePositionObserve", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"RivianPilotLanePositionGoLive", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"RivianPilotCurveOffset", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"RivianPilotCurveOffsetInches", {PERSISTENT | BACKUP, INT, "3"}},
+    {"RivianPilotCurveThreshold", {PERSISTENT | BACKUP, INT, "35"}},
+    {"RivianPilotLanePositionPreference", {PERSISTENT | BACKUP, INT, "0"}},
+    {"RivianPilotCenterCorrectionInches", {PERSISTENT | BACKUP, INT, "5"}},
+    {"RivianPilotLanePositionBiasInches", {PERSISTENT | BACKUP, INT, "3"}},
+    {"RivianPilotLanePositionRelaxed", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"RivianPilotNudgeOffset", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"RivianPilotNudgeOffsetInches", {PERSISTENT | BACKUP, INT, "3"}},
+    {"RivianPilotNudgeHoldSeconds", {PERSISTENT | BACKUP, INT, "10"}},
+    {"RivianPilotVehicleWidthInches", {PERSISTENT | BACKUP, INT, "82"}},
+    {"RivianPilotBoundaryBufferInches", {PERSISTENT | BACKUP, INT, "5"}},
+    {"RivianPilotPoorRoadOffsetInches", {PERSISTENT | BACKUP, INT, "2"}},
+    {"RivianPilotDynamicCameraOffset", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, FLOAT, "0.0"}},
+    {"RivianPilotDynamicCameraOffsetUpdated", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, FLOAT, "0.0"}},
+
     {"DynamicExperimentalControl", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"BlindSpot", {PERSISTENT | BACKUP, BOOL, "0"}},
 

@@ -26,6 +26,8 @@ from openpilot.common.version import get_build_metadata
 from openpilot.common.hardware import HARDWARE
 
 from openpilot.sunnypilot.mads.mads import ModularAssistiveDrivingSystem
+from openpilot.sunnypilot.rivian_lane_position.lane_position_controller import LanePositionController
+from openpilot.sunnypilot.rivian_lane_position.lane_position_controller import memory_params
 from openpilot.sunnypilot import get_sanitize_int_param
 from openpilot.sunnypilot.selfdrive.car.car_specific import CarSpecificEventsSP
 from openpilot.sunnypilot.selfdrive.car.cruise_helpers import CruiseHelper
@@ -173,6 +175,17 @@ class SelfdriveD(CruiseHelper):
     self.events_sp_prev = []
 
     self.mads = ModularAssistiveDrivingSystem(self)
+    self.lane_position_controller = None
+    if self.CP.brand == "rivian":
+      try:
+        self.lane_position_controller = LanePositionController(self.params, memory_params())
+      except Exception as e:
+        # This optional feature must never prevent selfdrived from starting.
+        try:
+          cloudlog.event("rivian lane position error", feature="initialization",
+                         error_type=type(e).__name__)
+        except Exception:
+          pass
     self.icbm = IntelligentCruiseButtonManagement(self.CP, self.CP_SP)
 
     self.car_events_sp = CarSpecificEventsSP(self.CP, self.CP_SP)
@@ -467,6 +480,17 @@ class SelfdriveD(CruiseHelper):
     if gps_ok:
       self.distance_traveled = 0
     self.distance_traveled += abs(CS.vEgo) * DT_CTRL
+
+    if self.lane_position_controller is not None:
+      try:
+        self.lane_position_controller.update(
+          CS, self.sm['carControl'].latActive, self.sm['modelV2'], self.sm['controlsState'],
+          self.sm['carControl'], self.sm['carOutput'],
+        )
+      except Exception as e:
+        # A controller failure expires its heartbeat, causing modeld to return
+        # to the unmodified XNOR path within one second.
+        self.lane_position_controller.suppress_after_error(e)
 
     # TODO: fix simulator
     if not SIMULATION or REPLAY:

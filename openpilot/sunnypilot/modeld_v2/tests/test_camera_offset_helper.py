@@ -45,6 +45,20 @@ class TestCameraOffset:
     self.camera_offset.update(main_transform, extra_transform, sm, False)
     np.testing.assert_almost_equal(self.camera_offset.actual_camera_offset, 0.038)
 
+  def test_immediate_offset_bypasses_filter(self):
+    self.camera_offset.set_offset(0.12, immediate=True)
+    assert self.camera_offset.camera_offset == 0.12
+    assert self.camera_offset.actual_camera_offset == 0.12
+
+  def test_dynamic_offset_watchdog(self):
+    valid = self.camera_offset.valid_dynamic_offset
+    assert valid(0.10, 9.5, 10.0)
+    assert valid(15 * 0.0254, 9.5, 10.0)
+    assert not valid(float("nan"), 9.5, 10.0)
+    assert not valid(15.1 * 0.0254, 9.5, 10.0)
+    assert not valid(0.10, 8.9, 10.0)
+    assert not valid("invalid", 9.5, 10.0)
+
   def test_camera_offset_(self):
     intrinsics = self.dc.fcam.intrinsics
     transform = np.eye(3, dtype=np.float32)

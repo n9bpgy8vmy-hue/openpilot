@@ -412,7 +412,19 @@ def main(demo=False):
     if sm.frame % 60 == 0:
       model.lat_delay = get_lat_delay(params, sm["liveDelay"].lateralDelay)
       model.PLANPLUS_CONTROL = params.get("PlanplusControl", return_default=True)
-      camera_offset_helper.set_offset(params.get("CameraOffset", return_default=True))
+    if sm.frame % 4 == 0:
+      base_camera_offset = params.get("CameraOffset", return_default=True)
+      dynamic_camera_offset = params.get("RivianPilotDynamicCameraOffset", return_default=True)
+      dynamic_offset_updated = params.get("RivianPilotDynamicCameraOffsetUpdated", return_default=True)
+      dynamic_offset_valid = camera_offset_helper.valid_dynamic_offset(
+        dynamic_camera_offset, dynamic_offset_updated, time.monotonic(),
+      )
+      force_zero = (CP.brand != "rivian" or sm["carState"].steeringPressed or
+                    sm["carState"].leftBlinker or sm["carState"].rightBlinker or
+                    sm["carState"].gearShifter != car.CarState.GearShifter.drive or
+                    not sm["carControl"].latActive or not dynamic_offset_valid)
+      camera_offset_helper.set_offset(base_camera_offset + (0.0 if force_zero else dynamic_camera_offset),
+                                      immediate=force_zero)
     lat_smooth_seconds = get_lat_smooth_seconds(v_ego, model.LAT_SMOOTH_SECONDS)
     lat_delay = model.lat_delay + lat_smooth_seconds
     if sm.updated["liveCalibration"] and sm.seen['roadCameraState'] and sm.seen['deviceState']:
