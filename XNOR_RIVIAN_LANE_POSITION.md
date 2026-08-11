@@ -4,6 +4,10 @@ This branch ports the bounded Rivian lane-position and curve-adjustment controll
 to XNOR's `rx-dev-src` architecture. It does not include RivianPilot's MADS,
 post-turn, navigation, or vision-BSM changes.
 
+The repository retains XNOR's `.lfsconfig`, which downloads model, font, and
+device assets from SunnyPilot's public GitLab LFS endpoint. The focused CI verifies
+that critical installer assets resolve to real files rather than LFS pointers.
+
 ## Initial validation
 
 1. Install the `rx-laneposition` branch.
