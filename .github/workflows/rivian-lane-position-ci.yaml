@@ -21,7 +21,12 @@ jobs:
       - name: Install locked test environment
         run: uv sync --frozen --extra testing
       - name: Generate native Params and Cereal modules
-        run: uv run --frozen --all-extras scons -j2 --minimal openpilot/common/params_pyx.so openpilot/cereal
+        run: |
+          uv run --frozen --all-extras scons -j2 --minimal \
+            openpilot/common/params_pyx.so \
+            openpilot/cereal \
+            msgq_repo/msgq/ipc_pyx.so \
+            msgq_repo/msgq/visionipc/visionipc_pyx.so
       - name: Run focused tests
         run: |
           uv run --frozen --extra testing pytest -q -n 0 \
