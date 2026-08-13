@@ -27,6 +27,21 @@ jobs:
             openpilot/cereal \
             msgq_repo/msgq/ipc_pyx.so \
             msgq_repo/msgq/visionipc/visionipc_pyx.so
+      - name: Verify runtime dependencies and imports
+        run: |
+          uv run --frozen --all-extras python - <<'PY'
+          import yaml
+          import numpy
+          import openpilot.cereal.messaging
+          from openpilot.common.params import Params
+          from msgq.visionipc import VisionIpcClient
+          from openpilot.sunnypilot.rivian_lane_position.lane_position_controller import LanePositionController
+          from openpilot.sunnypilot.modeld_v2.camera_offset_helper import CameraOffsetHelper
+          print("runtime imports OK", yaml.__version__, numpy.__version__, Params, VisionIpcClient,
+                LanePositionController, CameraOffsetHelper)
+          PY
+      - name: Compile complete device tree
+        run: uv run --frozen --all-extras scons -j2 --minimal
       - name: Run focused tests
         run: |
           uv run --frozen --extra testing pytest -q -n 0 \
